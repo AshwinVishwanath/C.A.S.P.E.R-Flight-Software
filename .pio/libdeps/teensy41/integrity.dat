@@ -1,0 +1,6 @@
+adafruit/Adafruit Unified Sensor@^1.1.14
+denyssene/SimpleKalmanFilter@^0.1.0
+adafruit/Adafruit BusIO@^1.14.1
+adafruit/Adafruit BMP3XX Library@^2.1.5
+adafruit/Adafruit BNO055@^1.6.3
+mbed-inst/Math@0.0.0+sha.067c036b09e0
