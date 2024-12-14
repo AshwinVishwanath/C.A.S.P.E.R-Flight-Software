@@ -10,6 +10,7 @@
             "includePath": [
                 "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/include",
                 "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/src",
+                "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/Bolder Flight Systems Eigen/src",
                 "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/Adafruit BMP3XX Library",
                 "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/Adafruit BNO055",
                 "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/Adafruit BNO055/utility",
@@ -124,6 +125,7 @@
                 "path": [
                     "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/include",
                     "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/src",
+                    "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/Bolder Flight Systems Eigen/src",
                     "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/Adafruit BMP3XX Library",
                     "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/Adafruit BNO055",
                     "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/Adafruit BNO055/utility",
