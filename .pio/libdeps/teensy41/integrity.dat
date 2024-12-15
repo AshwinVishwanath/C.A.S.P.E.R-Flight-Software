@@ -1,7 +1,7 @@
-denyssene/SimpleKalmanFilter@^0.1.0
 mbed-inst/Math@0.0.0+sha.067c036b09e0
-bolderflight/Bolder Flight Systems Eigen@^3.0.0
 adafruit/Adafruit BMP3XX Library@^2.1.5
-adafruit/Adafruit Unified Sensor@^1.1.14
-adafruit/Adafruit BusIO@^1.14.1
+denyssene/SimpleKalmanFilter@^0.1.0
+hideakitai/ArduinoEigen@^0.3.2
 adafruit/Adafruit BNO055@^1.6.3
+adafruit/Adafruit BusIO@^1.14.1
+adafruit/Adafruit Unified Sensor@^1.1.14

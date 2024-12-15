@@ -1,21 +1,23 @@
 #include <Arduino.h>
 #include "sensor_setup.h"
-#include "filter.h"
+#include "ekf_sensor_fusion.h"
 
 void setup() {
     Serial.begin(115200);
+    delay(2000); // Wait for Serial Monitor to connect
+    Serial.println("Starting sensor setup...");
+
+    // Setup BNO055 and BMP388 sensors
     setupSensors();
     delay(100);
 
-    if (!waitForCalibration()) {
-        Serial.println("Calibration failed, cannot proceed.");
-        while(1);
-    }
-
     // Initialize EKF with starting position/velocity (assuming stationary at baseline)
-    ekfInit(0.0f, 0.0f, baselineAltitude, 0.0f, 0.0f, 0.0f);
+    ekfInit(0.0f, 0.0f, baselineAltitude, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+    Serial.println("EKF initialized with starting state:");
+    Serial.print("Baseline Altitude: "); 
+    Serial.println(baselineAltitude, 3);
 
-    Serial.println("Calibration complete. Starting main loop...");
+    Serial.println("Setup complete. Starting main loop...");
 }
 
 void loop() {
@@ -25,32 +27,38 @@ void loop() {
     unsigned long currentTime = micros();
     if (currentTime - loopStartTime >= loopInterval) {
         loopStartTime = currentTime;
-        float dt = 0.001f;
+        float dt = 0.001f; // 1 millisecond time step
 
+        // Variables to hold IMU data
         float yaw, pitch, roll;
         float ax_ned, ay_ned, az_ned;
-        getCorrectedIMUData(yaw, pitch, roll, ax_ned, ay_ned, az_ned);
+        float mx, my, mz;
 
+        // Get IMU data (Yaw, Pitch, Roll, Accelerometer, Magnetometer)
+        getCorrectedIMUData(yaw, pitch, roll, ax_ned, ay_ned, az_ned, mx, my, mz);
+
+        // Get relative altitude from BMP388
         float relativeAltitude = getRelativeAltitude();
 
-        // EKF Predict step with acceleration in NED
-        ekfPredict(ax_ned, ay_ned, az_ned, dt);
+        // EKF Predict step with NED accelerations and orientation from BNO055
+        ekfPredict(ax_ned, ay_ned, az_ned, yaw, pitch, roll, dt);
 
-        // EKF update with barometric altitude
-        ekfUpdate(relativeAltitude);
+        // EKF update with accelerometer, magnetometer, and barometric altitude
+        ekfUpdate(ax_ned, ay_ned, az_ned, mx, my, mz, relativeAltitude);
 
-        float x,y,z,vx,vy,vz;
-        ekfGetState(x,y,z,vx,vy,vz);
+        // Get the current state from the EKF
+        float x, y, z, vx, vy, vz, roll_est, pitch_est, yaw_est;
+        ekfGetState(x, y, z, vx, vy, vz, roll_est, pitch_est, yaw_est);
 
-        // Print line in required format for the serial plotter
+        // Print the current state for analysis
         Serial.print(">");
-        Serial.print("altitude:");Serial.print(z,3);
-        Serial.print(",vx:");Serial.print(vx,3);
-        Serial.print(",vy:");Serial.print(vy,3);
-        Serial.print(",vz:");Serial.print(vz,3);
-        Serial.print(",yaw:");Serial.print(yaw*180.0f/M_PI,3);
-        Serial.print(",pitch:");Serial.print(pitch*180.0f/M_PI,3);
-        Serial.print(",roll:");Serial.print(roll*180.0f/M_PI,3);
-        Serial.println(); // \r\n is added automatically by println
+        Serial.print("altitude:"); Serial.print(z, 3);
+        Serial.print(",vx:"); Serial.print(vx, 3);
+        Serial.print(",vy:"); Serial.print(vy, 3);
+        Serial.print(",vz:"); Serial.print(vz, 3);
+        Serial.print(",yaw:"); Serial.print(yaw_est * 180.0f / M_PI, 3);
+        Serial.print(",pitch:"); Serial.print(pitch_est * 180.0f / M_PI, 3);
+        Serial.print(",roll:"); Serial.print(roll_est * 180.0f / M_PI, 3);
+        Serial.println();
     }
 }
