@@ -10,5 +10,6 @@ extern float altitudeBias;     // Bias used to correct altitude readings
 void setupSensors();
 void getCorrectedIMUData(float &yaw, float &pitch, float &roll, float &ax_ned, float &ay_ned, float &az_ned, float &mx, float &my, float &mz);
 float getRelativeAltitude();
+float manualCalibrateBMP388(); // Added function declaration
 
 #endif // SENSOR_SETUP_H

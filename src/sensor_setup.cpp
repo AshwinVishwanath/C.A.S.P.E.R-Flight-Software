@@ -3,6 +3,7 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 #include <Adafruit_BMP3XX.h>
+#include <Wire.h>
 
 // Sensor objects
 Adafruit_BNO055 bno = Adafruit_BNO055(55);
@@ -30,7 +31,7 @@ void setupSensors() {
     Serial.println("BNO055 calibration offsets applied.");
 
     // **BMP388 Setup**
-    if (!bmp.begin_I2C(0x76)) {
+    if (!bmp.begin_I2C(0x76, &Wire1)) {
         Serial.println("BMP388 initialization failed!");
         while (1);
     }
@@ -40,7 +41,7 @@ void setupSensors() {
     bmp.setPressureOversampling(BMP3_OVERSAMPLING_16X);
     bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_16X);
     bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_15);
-    bmp.setOutputDataRate(BMP3_ODR_50_HZ);
+    bmp.setOutputDataRate(BMP3_ODR_100_HZ);
 
     // **Manual Calibration Step for BMP388**
     altitudeBias = manualCalibrateBMP388();
