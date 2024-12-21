@@ -16,6 +16,7 @@ const adafruit_bno055_offsets_t BNO_CALIBRATION_OFFSETS = {
     0,      // gyro_offset_z
     1000,   // accel_radius
     769     // mag_radius
+    
 };
 
 #endif // BNO_LUT_H

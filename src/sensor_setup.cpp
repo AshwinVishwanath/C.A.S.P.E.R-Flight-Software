@@ -104,6 +104,9 @@ float getRelativeAltitude() {
     }
 }
 
+/**
+ * Get corrected IMU data, including accelerometer, gyroscope, and magnetometer, from the BNO055.
+ */
 void getCorrectedIMUData(float &yaw, float &pitch, float &roll, float &ax_ned, float &ay_ned, float &az_ned, float &mx, float &my, float &mz) {
     sensors_event_t accelEvent, gyroEvent, magEvent;
 
@@ -123,6 +126,31 @@ void getCorrectedIMUData(float &yaw, float &pitch, float &roll, float &ax_ned, f
     az_ned = accelEvent.acceleration.z;
 
     // Extract magnetic field data from magnetometer
+    mx = magEvent.magnetic.x;
+    my = magEvent.magnetic.y;
+    mz = magEvent.magnetic.z;
+}
+
+
+void getSensorData(float &ax, float &ay, float &az, float &gx, float &gy, float &gz, float &mx, float &my, float &mz) {
+    sensors_event_t accelEvent, gyroEvent, magEvent;
+
+    // Get sensor data from BNO055
+    bno.getEvent(&accelEvent, Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    bno.getEvent(&gyroEvent, Adafruit_BNO055::VECTOR_GYROSCOPE);
+    bno.getEvent(&magEvent, Adafruit_BNO055::VECTOR_MAGNETOMETER);
+
+    // Extract accelerometer data
+    ax = accelEvent.acceleration.x;
+    ay = accelEvent.acceleration.y;
+    az = accelEvent.acceleration.z;
+
+    // Extract gyroscope data
+    gx = gyroEvent.gyro.x;
+    gy = gyroEvent.gyro.y;
+    gz = gyroEvent.gyro.z;
+
+    // Extract magnetic field data
     mx = magEvent.magnetic.x;
     my = magEvent.magnetic.y;
     mz = magEvent.magnetic.z;
