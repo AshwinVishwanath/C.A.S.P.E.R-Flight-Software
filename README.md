@@ -1,4 +1,4 @@
-# Project Title: Extended Kalman Filter (EKF) for Real-Time Position and Orientation Tracking
+#  Extended Kalman Filter (EKF) for Real-Time Position and Orientation Tracking
 
 ## Overview
 This project implements a real-time position and orientation tracking system using an Extended Kalman Filter (EKF) for aerospace applications. The system fuses data from multiple sensors, including an Adafruit BNO055 IMU and an Adafruit BMP388 barometric pressure sensor, to estimate 3D position, velocity, and orientation. This system is designed to run on a Teensy 4.1 microcontroller, leveraging its high-speed processing capabilities.
