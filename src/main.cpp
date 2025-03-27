@@ -2,6 +2,7 @@
 #include "sensor_setup.h"
 #include "ekf_sensor_fusion.h"
 #include "orientation_VQF.h" // Include VQF header for orientation tracking
+#include "datalogging.h"     // Added to integrate datalogging functions
 
 void setup() {
     Serial.begin(115200);
@@ -23,6 +24,9 @@ void setup() {
     vqfInit();
     vqfCalibrateOrientation(); // Perform 10-second calibration for roll, pitch, yaw offsets
     Serial.println("VQF initialized and calibrated for roll, pitch, and yaw tracking.");
+
+    // Initialize SD card files for datalogging (raw and filtered sensor data)
+    setupFiles();
 
     Serial.println("Setup complete. Starting main loop...");
 }
@@ -53,7 +57,7 @@ void loop() {
 
         // **Update VQF for Orientation (Roll, Pitch, Yaw)**
         vqfPredict(gx, gy, gz, dt);
-        vqfUpdate(ax, ay, az, mx, my, mz);
+        vqfUpdate(ax, ay, az);
 
         // Get the current state from the EKF
         float x, y, z, vx, vy, vz;
@@ -75,5 +79,8 @@ void loop() {
         Serial.print(",pitch:"); Serial.print(pitch, 3); // Pitch in degrees
         Serial.print(",yaw:"); Serial.print(yaw, 3); // Yaw in degrees
         Serial.println();
+
+        // Log sensor data (both raw and filtered) without affecting the printed output
+        logSensorData();
     }
 }

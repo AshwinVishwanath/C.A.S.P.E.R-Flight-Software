@@ -22,14 +22,30 @@ void ekfInit(float x, float y, float z, float vx, float vy, float vz) {
 
     P = Eigen::MatrixXf::Identity(n_x, n_x) * 0.1f;
 
-    Q = Eigen::MatrixXf::Zero(n_x, n_x);
-    Q(0,0) = 0.01f; Q(1,1) = 0.01f; Q(2,2) = 0.01f; 
-    Q(3,3) = 0.1f; Q(4,4) = 0.1f; Q(5,5) = 0.1f; 
+    // Process noise matrix Q
+    Q = (Eigen::MatrixXf(n_x, n_x) << 
+        0.01f, 0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // Row 1: x position
+        0.0f,  0.01f, 0.0f,  0.0f,  0.0f,  0.0f,  // Row 2: y position
+        0.0f,  0.0f,  0.01f, 0.0f,  0.0f,  0.0f,  // Row 3: z position
+        0.0f,  0.0f,  0.0f,  0.1f,  0.0f,  0.0f,  // Row 4: x velocity
+        0.0f,  0.0f,  0.0f,  0.0f,  0.1f,  0.0f,  // Row 5: y velocity
+        0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.1f   // Row 6: z velocity
+    ).finished();
 
-    R = Eigen::MatrixXf::Identity(n_z, n_z) * 0.1f;
+    // Measurement noise matrix R
+    R = (Eigen::MatrixXf(n_z, n_z) << 
+        0.1f, 0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // Row 1: x acceleration
+        0.0f, 0.1f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // Row 2: y acceleration
+        0.0f, 0.0f,  0.1f,  0.0f,  0.0f,  0.0f,  0.0f,  // Row 3: z acceleration
+        0.0f, 0.0f,  0.0f,  0.1f,  0.0f,  0.0f,  0.0f,  // Row 4: unused (placeholder)
+        0.0f, 0.0f,  0.0f,  0.0f,  0.1f,  0.0f,  0.0f,  // Row 5: unused (placeholder)
+        0.0f, 0.0f,  0.0f,  0.0f,  0.0f,  0.1f,  0.0f,  // Row 6: unused (placeholder)
+        0.0f, 0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.1f   // Row 7: altitude
+    ).finished();
 
     initialized = true;
 }
+
 
 void ekfPredict(float ax, float ay, float az, float dt) {
     if (!initialized) return;

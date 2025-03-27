@@ -1,4 +1,14 @@
-#include "orientation_vqf.h"
+/*
+   orientation_VQF.cpp
+
+   - No low-pass filtering on gyro or accelerometer data.
+   - Y is "up," so rotation about Y = "roll."
+   - Magnetometer usage removed (yaw will drift).
+   - A small complementary-fusion step is used to align with gravity from accelerometer data,
+     giving the gyro a heavier weight overall.
+*/
+
+#include "orientation_VQF.h"
 #include "BNO_LUT.h"
 #include <ArduinoEigen.h>
 #include <math.h>
@@ -6,171 +16,196 @@
 // State Vector: [q_w, q_x, q_y, q_z]
 static Eigen::VectorXf x_state(4);
 
-// Process and measurement noise covariance matrices
-static Eigen::MatrixXf Q;
-static Eigen::MatrixXf R;
-
-// Low-pass filter coefficients
-static float alpha_accel = 0.98f;  // Accelerometer filter
-static float alpha_gyro = 0.98f;   // Gyroscope filter
-static float alpha_mag = 0.98f;    // Magnetometer filter
-
-// Filtered sensor values
-static float ax_f, ay_f, az_f;
-static float gx_f, gy_f, gz_f;
-static float mx_f, my_f, mz_f;
+// Complementary-fusion weight: fraction by which we move toward
+// the accelerometer-based tilt each update (lower = rely on gyro more).
+static float kFusionGain = 0.02f;  // 2% tilt correction each update
 
 // Calibration offsets
-static float yaw_offset = 0.0f;
-static float pitch_offset = 0.0f;
-static float roll_offset = 0.0f;
-static bool calibrated = false;
+static float roll_offset  = 0.0f;  // about Y
+static float pitch_offset = 0.0f;  // about X
+static float yaw_offset   = 0.0f;  // about Z
+static bool  calibrated   = false;
 
-void vqfInit() {
-    // Initialize quaternion to [1, 0, 0, 0] (no rotation)
+void vqfInit()
+{
+    // Initialize quaternion to [1, 0, 0, 0]
     x_state = Eigen::VectorXf::Zero(4);
-    x_state(0) = 1.0f;
-
-    // Process noise
-    Q = Eigen::MatrixXf::Zero(4, 4);
-
-    // Measurement noise
-    R = Eigen::MatrixXf::Identity(6, 6) * 0.01f;
+    x_state(0) = 1.0f;  // w = 1
 }
 
-void vqfPredict(float gx, float gy, float gz, float dt) {
-    // Apply low-pass filter to gyro
-    gx_f = alpha_gyro * gx_f + (1.0f - alpha_gyro) * gx;
-    gy_f = alpha_gyro * gy_f + (1.0f - alpha_gyro) * gy;
-    gz_f = alpha_gyro * gz_f + (1.0f - alpha_gyro) * gz;
-
+void vqfPredict(float gx, float gy, float gz, float dt)
+{
     // Extract current quaternion
     float qw = x_state(0);
     float qx = x_state(1);
     float qy = x_state(2);
     float qz = x_state(3);
 
-    // Quaternion derivative
-    float dq_w = 0.5f * (-qx * gx_f - qy * gy_f - qz * gz_f);
-    float dq_x = 0.5f * (qw * gx_f + qy * gz_f - qz * gy_f);
-    float dq_y = 0.5f * (qw * gy_f - qx * gz_f + qz * gx_f);
-    float dq_z = 0.5f * (qw * gz_f + qx * gy_f - qy * gx_f);
+    // Quaternion derivative from gyro
+    // (Using standard small-angle quaternion kinematics)
+    float dq_w = 0.5f * (-qx * gx - qy * gy - qz * gz);
+    float dq_x = 0.5f * ( qw * gx + qy * gz - qz * gy);
+    float dq_y = 0.5f * ( qw * gy - qx * gz + qz * gx);
+    float dq_z = 0.5f * ( qw * gz + qx * gy - qy * gx);
 
-    // Update quaternion
+    // Integrate
     x_state(0) += dq_w * dt;
     x_state(1) += dq_x * dt;
     x_state(2) += dq_y * dt;
     x_state(3) += dq_z * dt;
 
-    // Normalize quaternion
-    float norm = sqrt(pow(x_state(0), 2) + pow(x_state(1), 2) + pow(x_state(2), 2) + pow(x_state(3), 2));
-    x_state(0) /= norm;
-    x_state(1) /= norm;
-    x_state(2) /= norm;
-    x_state(3) /= norm;
+    // Normalize
+    float norm = sqrt(
+        x_state(0)*x_state(0) + x_state(1)*x_state(1) +
+        x_state(2)*x_state(2) + x_state(3)*x_state(3)
+    );
+    x_state /= norm;
 }
 
-void vqfUpdate(float ax, float ay, float az, float mx, float my, float mz) {
-    // Apply low-pass filter to accelerometer and magnetometer
-    ax_f = alpha_accel * ax_f + (1.0f - alpha_accel) * ax;
-    ay_f = alpha_accel * ay_f + (1.0f - alpha_accel) * ay;
-    az_f = alpha_accel * az_f + (1.0f - alpha_accel) * az;
+void vqfUpdate(float ax, float ay, float az)
+{
+    // Check that accelerometer is near 1g:
+    float accelNorm = sqrt(ax*ax + ay*ay + az*az);
+    if (accelNorm < 0.5f || accelNorm > 1.5f) {
+        // If not near 1g, skip tilt correction
+        return;
+    }
 
-    mx_f = alpha_mag * mx_f + (1.0f - alpha_mag) * mx;
-    my_f = alpha_mag * my_f + (1.0f - alpha_mag) * my;
-    mz_f = alpha_mag * mz_f + (1.0f - alpha_mag) * mz;
+    // Normalize so the magnitude is 1
+    ax /= accelNorm;
+    ay /= accelNorm;
+    az /= accelNorm;
 
-    // Normalize accelerometer and magnetometer
-    float accelNorm = sqrt(ax_f * ax_f + ay_f * ay_f + az_f * az_f);
-    ax_f /= accelNorm;
-    ay_f /= accelNorm;
-    az_f /= accelNorm;
+    // We want "Y up," so let's interpret:
+    //   roll = rotation about Y,
+    //   pitch = rotation about X,
+    // Gravity is measured as (ax, ay, az).
 
-    float magNorm = sqrt(mx_f * mx_f + my_f * my_f + mz_f * mz_f);
-    mx_f /= magNorm;
-    my_f /= magNorm;
-    mz_f /= magNorm;
+    // Let's define:
+    //   pitch_acc = angle about X (tilt forward/back),
+    //   roll_acc  = angle about Y (tilt left/right).
+    //
+    // Using geometry: if Y is “up,”
+    //   pitch_acc = atan2(-az, sqrt(ax^2 + ay^2))  (rotation about X)
+    //   roll_acc  = atan2(ax,  ay)                 (rotation about Y)
+    float pitch_acc = atan2(-az, sqrt(ax*ax + ay*ay));
+    float roll_acc  = atan2( ax, ay);
 
-    // Tilt-compensated magnetometer
-    float pitch_acc = atan2(-ax_f, sqrt(ay_f * ay_f + az_f * az_f));
-    float roll_acc = atan2(ay_f, az_f);
+    // Build a tilt quaternion from these two Euler angles
+    float halfRoll  = roll_acc  * 0.5f;
+    float halfPitch = pitch_acc * 0.5f;
 
-    float mx_tilt = mx_f * cos(pitch_acc) + mz_f * sin(pitch_acc);
-    float my_tilt = my_f * cos(roll_acc) + mz_f * sin(roll_acc);
-    float yaw_mag = atan2(-my_tilt, mx_tilt);
+    float cy = cos(halfRoll);
+    float sy = sin(halfRoll);
+    float cx = cos(halfPitch);
+    float sx = sin(halfPitch);
 
-    // Update quaternion from roll, pitch, and yaw
-    float qw = cos(roll_acc / 2) * cos(pitch_acc / 2) * cos(yaw_mag / 2) +
-               sin(roll_acc / 2) * sin(pitch_acc / 2) * sin(yaw_mag / 2);
-    float qx = sin(roll_acc / 2) * cos(pitch_acc / 2) * cos(yaw_mag / 2) -
-               cos(roll_acc / 2) * sin(pitch_acc / 2) * sin(yaw_mag / 2);
-    float qy = cos(roll_acc / 2) * sin(pitch_acc / 2) * cos(yaw_mag / 2) +
-               sin(roll_acc / 2) * cos(pitch_acc / 2) * sin(yaw_mag / 2);
-    float qz = cos(roll_acc / 2) * cos(pitch_acc / 2) * sin(yaw_mag / 2) -
-               sin(roll_acc / 2) * sin(pitch_acc / 2) * cos(yaw_mag / 2);
+    // For Euler angles (roll about Y, pitch about X) => q = qy(roll)*qx(pitch)
+    // roll_y = [cy, 0, sy, 0]
+    // pitch_x= [cx, sx, 0, 0]
+    // Hamilton product => q_meas:
+    float qw_meas = cy * cx;
+    float qx_meas = cy * sx;
+    float qy_meas = sy * cx;
+    float qz_meas = -sy * sx;  // sign from Y*X multiplication
 
-    x_state(0) = qw;
-    x_state(1) = qx;
-    x_state(2) = qy;
-    x_state(3) = qz;
+    // Current estimate
+    float qw_est = x_state(0);
+    float qx_est = x_state(1);
+    float qy_est = x_state(2);
+    float qz_est = x_state(3);
 
-    // Normalize quaternion
-    float norm = sqrt(qw * qw + qx * qx + qy * qy + qz * qz);
-    x_state(0) /= norm;
-    x_state(1) /= norm;
-    x_state(2) /= norm;
-    x_state(3) /= norm;
+    // Complementary-fusion: blend orientation
+    float alpha  = 1.0f - kFusionGain; // fraction to keep from old estimate
+    float qw_new = alpha*qw_est + (1.0f - alpha)*qw_meas;
+    float qx_new = alpha*qx_est + (1.0f - alpha)*qx_meas;
+    float qy_new = alpha*qy_est + (1.0f - alpha)*qy_meas;
+    float qz_new = alpha*qz_est + (1.0f - alpha)*qz_meas;
+
+    // Normalize
+    float nq = sqrt(qw_new*qw_new + qx_new*qx_new + qy_new*qy_new + qz_new*qz_new);
+    x_state(0) = qw_new / nq;
+    x_state(1) = qx_new / nq;
+    x_state(2) = qy_new / nq;
+    x_state(3) = qz_new / nq;
 }
 
-void vqfGetEuler(float &roll, float &pitch, float &yaw) {
+void vqfGetEuler(float &roll_deg, float &pitch_deg, float &yaw_deg)
+{
+    // Standard Tait-Bryan angles (roll about X, pitch about Y, yaw about Z):
+    //   roll_x  = atan2(2*(qw*qx + qy*qz), 1 - 2*(qx^2 + qy^2))
+    //   pitch_y = asin(2*(qw*qy - qz*qx))
+    //   yaw_z   = atan2(2*(qw*qz + qx*qy), 1 - 2*(qy^2 + qz^2))
+
     float qw = x_state(0);
     float qx = x_state(1);
     float qy = x_state(2);
     float qz = x_state(3);
 
-    roll = atan2(2.0f * (qw * qx + qy * qz), 1.0f - 2.0f * (qx * qx + qy * qy)) * 180.0f / M_PI;
-    pitch = asin(2.0f * (qw * qy - qz * qx)) * 180.0f / M_PI;
-    yaw = atan2(2.0f * (qw * qz + qx * qy), 1.0f - 2.0f * (qy * qy + qz * qz)) * 180.0f / M_PI;
+    float roll_x = atan2(
+        2.0f*(qw*qx + qy*qz),
+        1.0f - 2.0f*(qx*qx + qy*qy)
+    );
+    float pitch_y = asinf(
+        2.0f*(qw*qy - qz*qx)
+    );
+    float yaw_z = atan2(
+        2.0f*(qw*qz + qx*qy),
+        1.0f - 2.0f*(qy*qy + qz*qz)
+    );
 
-    // Apply offsets
+    // We want final:
+    //   roll_deg (rotation about Y)   = pitch_y
+    //   pitch_deg (rotation about X)  = roll_x
+    //   yaw_deg (rotation about Z)    = yaw_z
+    float roll  = pitch_y;
+    float pitch = roll_x;
+    float yaw   = yaw_z;
+
+    // Convert to degrees
+    roll_deg  = roll  * 180.0f / M_PI;
+    pitch_deg = pitch * 180.0f / M_PI;
+    yaw_deg   = yaw   * 180.0f / M_PI;
+
+    // Apply user-calibration offsets
     if (calibrated) {
-        roll -= roll_offset;
-        pitch -= pitch_offset;
-        yaw -= yaw_offset;
+        roll_deg  -= roll_offset;
+        pitch_deg -= pitch_offset;
+        yaw_deg   -= yaw_offset;
     }
 }
 
-void vqfCalibrateOrientation() {
+void vqfCalibrateOrientation()
+{
     const unsigned long calibrationTime = 10000; // 10 seconds
     unsigned long startTime = millis();
     unsigned long count = 0;
 
-    float yaw_sum = 0.0f;
+    float roll_sum  = 0.0f;
     float pitch_sum = 0.0f;
-    float roll_sum = 0.0f;
+    float yaw_sum   = 0.0f;
 
-    Serial.println("Calibrating VQF orientation... Please keep the device still.");
+    Serial.println("Calibrating orientation... Keep device still, Y up.");
 
     while (millis() - startTime < calibrationTime) {
         float roll_temp, pitch_temp, yaw_temp;
         vqfGetEuler(roll_temp, pitch_temp, yaw_temp);
 
-        roll_sum += roll_temp;
+        roll_sum  += roll_temp;
         pitch_sum += pitch_temp;
-        yaw_sum += yaw_temp;
+        yaw_sum   += yaw_temp;
 
         count++;
-        delay(10); // 100 Hz sampling rate
+        delay(10); // ~100 Hz
     }
 
-    roll_offset = roll_sum / count;
+    roll_offset  = roll_sum / count;
     pitch_offset = pitch_sum / count;
-    yaw_offset = yaw_sum / count;
-
-    calibrated = true;
+    yaw_offset   = yaw_sum / count;
+    calibrated   = true;
 
     Serial.println("VQF calibration complete:");
-    Serial.print("Roll Offset: "); Serial.println(roll_offset, 3);
+    Serial.print("Roll Offset: ");  Serial.println(roll_offset, 3);
     Serial.print("Pitch Offset: "); Serial.println(pitch_offset, 3);
-    Serial.print("Yaw Offset: "); Serial.println(yaw_offset, 3);
+    Serial.print("Yaw Offset: ");   Serial.println(yaw_offset, 3);
 }

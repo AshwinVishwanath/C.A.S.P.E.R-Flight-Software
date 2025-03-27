@@ -1,0 +1,15 @@
+#ifndef DATALOGGING_H
+#define DATALOGGING_H
+
+#include <Arduino.h>
+
+// Initializes the SD card and opens files for logging raw and filtered sensor data.
+void setupFiles();
+
+// Logs both raw sensor data (IMU and barometric altitude) and filtered sensor data (EKF and VQF outputs).
+void logSensorData();
+
+// Flushes any remaining buffered data to the SD files.
+void flushAllBuffers();
+
+#endif // DATALOGGING_H

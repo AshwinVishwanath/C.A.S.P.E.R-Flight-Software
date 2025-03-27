@@ -1,46 +1,44 @@
 // datalogging.cpp
+// This file handles logging sensor data to the SD card.
+// It now logs two types of data:
+// 1. Raw sensor data: direct IMU readings (accelerometer, gyroscope, magnetometer)
+//    plus barometric altitude.
+// 2. Filtered sensor data: EKF sensor fusion results (position and velocity)
+//    and VQF orientation (roll, pitch, yaw).
+//
+// Data are buffered and then flushed to the SD card to reduce write overhead.
+
 #include "ekf_sensor_fusion.h"    // For EKF functions like ekfGetState()
-#include "datalogging.h"          // Declarations for these logging functions
 #include "orientation_VQF.h"      // For VQF functions (e.g., vqfGetEuler)
-#include "sensor_setup.h"         // For getCorrectedIMUData() and getRelativeAltitude()
-#include "filter.h"               // For EKF functions (ekfPredict, ekfUpdate, etc.)
+#include "sensor_setup.h"         // For getSensorData() and getRelativeAltitude()
 #include <SD.h>
 #include <SPI.h>
 #include <Arduino.h>
 
-// Set the number of log entries to buffer before flushing.
+// Number of log entries to buffer before flushing.
 const int BUFFER_THRESHOLD = 100;
 
-// Global SD File objects for each log file
-File imuRawFile;
-File imuFilteredFile;
-File imuOrientationFile;
-File barometerFile;
-File ekfFile;
+// Global SD File objects for raw and filtered sensor data.
+File rawDataFile;       // File for raw IMU/barometer data.
+File filteredDataFile;  // File for filtered EKF/VQF data.
 
-// Global String buffers and counters
-String imuRawBuffer = "";
-String imuFilteredBuffer = "";
-String imuOrientationBuffer = "";
-String barometerBuffer = "";
-String ekfBuffer = "";
-int imuRawCount = 0;
-int imuFilteredCount = 0;
-int imuOrientationCount = 0;
-int barometerCount = 0;
-int ekfCount = 0;
+// Global string buffers and counters for each log file.
+String rawBuffer = "";
+String filteredBuffer = "";
+int rawCount = 0;
+int filteredCount = 0;
 
-// Helper function: flush buffer for a given SD File and reset counter.
+// Flushes the provided buffer to its SD file and resets the counter.
 void flushBuffer(File &file, String &buffer, int &count) {
   if (file) {
     file.print(buffer);
-    file.flush();  // Ensure data is written to disk
+    file.flush();  // Ensure data is written to disk.
   }
   buffer = "";
   count = 0;
 }
 
-// Add a log entry to the specified buffer and flush when threshold is reached.
+// Appends a log entry to the buffer and flushes if the threshold is reached.
 void logData(File &file, String &buffer, int &count, const String &data) {
   buffer += data + "\n";
   count++;
@@ -49,120 +47,82 @@ void logData(File &file, String &buffer, int &count, const String &data) {
   }
 }
 
-// Setup the SD files – open (or create) each file for writing.
-// Adjust the chip–select pin (here 10 is assumed) as needed.
+// Setup the SD card files for logging.
+// Raw sensor data is written to "Raw_Sensor_Data.txt".
+// Filtered sensor data is written to "Filtered_Sensor_Data.txt".
+// Adjust the chip-select pin (here 10 is assumed) as needed.
 void setupFiles() {
   if (!SD.begin(10)) {
     Serial.println("SD initialization failed!");
     return;
   }
-  imuRawFile = SD.open("IMU_Raw_Data.txt", FILE_WRITE);
-  imuFilteredFile = SD.open("IMU_Filtered_Data.txt", FILE_WRITE);
-  imuOrientationFile = SD.open("IMU_Raw_Orientation_Data.txt", FILE_WRITE);
-  barometerFile = SD.open("Barometer_Raw_Data.txt", FILE_WRITE);
-  ekfFile = SD.open("EKF_Data.txt", FILE_WRITE);
-
-  if (!imuRawFile || !imuFilteredFile || !imuOrientationFile ||
-      !barometerFile || !ekfFile) {
+  rawDataFile = SD.open("Raw_Sensor_Data.txt", FILE_WRITE);
+  filteredDataFile = SD.open("Filtered_Sensor_Data.txt", FILE_WRITE);
+  
+  if (!rawDataFile || !filteredDataFile) {
     Serial.println("Failed to open one or more log files!");
   }
 }
 
-
-// functions to retrieve data from other modules and log it.
-
-
-// Log raw IMU sensor readings (accelerometer, gyroscope, magnetometer)
-void logIMURawData() {
-  sensors_event_t accelEvent, gyroEvent, magEvent;
-  // Get sensor events directly from BNO055
-  // (Assuming a global BNO055 object is available in sensor_setup.cpp)
-  // If not, modify to use the proper instance.
-  extern Adafruit_BNO055 bno;  
-  bno.getEvent(&accelEvent, Adafruit_BNO055::VECTOR_ACCELEROMETER);
-  bno.getEvent(&gyroEvent, Adafruit_BNO055::VECTOR_GYROSCOPE);
-  bno.getEvent(&magEvent, Adafruit_BNO055::VECTOR_MAGNETOMETER);
-
-  unsigned long timestamp = micros();
-  String line = String(timestamp) + "," +
-                String(accelEvent.acceleration.x, 3) + "," +
-                String(accelEvent.acceleration.y, 3) + "," +
-                String(accelEvent.acceleration.z, 3) + "," +
-                String(gyroEvent.gyro.x, 3) + "," +
-                String(gyroEvent.gyro.y, 3) + "," +
-                String(gyroEvent.gyro.z, 3) + "," +
-                String(magEvent.magnetic.x, 3) + "," +
-                String(magEvent.magnetic.y, 3) + "," +
-                String(magEvent.magnetic.z, 3);
-  logData(imuRawFile, imuRawBuffer, imuRawCount, line);
-}
-
-// Log filtered IMU data (accelerometer rotated to NED and offsets applied)
-void logIMUFilteredData() {
-  float yaw, pitch, roll;
-  float ax_ned, ay_ned, az_ned;
-  getCorrectedIMUData(yaw, pitch, roll, ax_ned, ay_ned, az_ned);
-  unsigned long timestamp = micros();
-  String line = String(timestamp) + "," +
-                String(yaw, 3) + "," +
-                String(pitch, 3) + "," +
-                String(roll, 3) + "," +
-                String(ax_ned, 3) + "," +
-                String(ay_ned, 3) + "," +
-                String(az_ned, 3);
-  logData(imuFilteredFile, imuFilteredBuffer, imuFilteredCount, line);
-}
-
-// Log orientation data from the VQF algorithm (as Euler angles).
-// Here we assume orientation_VQF.h provides vqfGetEuler().
-void logIMURawOrientationData() {
-  float roll, pitch, yaw;
-  vqfGetEuler(roll, pitch, yaw);
-  unsigned long timestamp = micros();
-  String line = String(timestamp) + "," +
-                String(roll, 3) + "," +
-                String(pitch, 3) + "," +
-                String(yaw, 3);
-  logData(imuOrientationFile, imuOrientationBuffer, imuOrientationCount, line);
-}
-
-// Log barometric altitude data (using getRelativeAltitude())
-void logBarometerData() {
+// Logs raw sensor data from the IMU and barometer.
+// Uses getSensorData() to get accelerometer, gyroscope, and magnetometer readings,
+// and getRelativeAltitude() for the barometric altitude.
+// The data are formatted as a CSV line.
+void logRawSensorData() {
+  float ax, ay, az, gx, gy, gz, mx, my, mz;
+  // Get raw IMU data (accelerometer, gyroscope, magnetometer).
+  getSensorData(ax, ay, az, gx, gy, gz, mx, my, mz);
+  
+  // Get barometric altitude.
   float relAlt = getRelativeAltitude();
+  
+  // Timestamp in microseconds.
   unsigned long timestamp = micros();
-  String line = String(timestamp) + "," + String(relAlt, 3);
-  logData(barometerFile, barometerBuffer, barometerCount, line);
-}
-
-// Log EKF sensor fusion data (state estimate: position and velocity)
-void logEKFData() {
-  float x, y, z, vx, vy, vz;
-  ekfGetState(x, y, z, vx, vy, vz);
-  unsigned long timestamp = micros();
+  
+  // CSV format: timestamp, ax, ay, az, gx, gy, gz, mx, my, mz, relative altitude
   String line = String(timestamp) + "," +
-                String(x, 3) + "," +
-                String(y, 3) + "," +
-                String(z, 3) + "," +
-                String(vx, 3) + "," +
-                String(vy, 3) + "," +
-                String(vz, 3);
-  logData(ekfFile, ekfBuffer, ekfCount, line);
+                String(ax, 3) + "," + String(ay, 3) + "," + String(az, 3) + "," +
+                String(gx, 3) + "," + String(gy, 3) + "," + String(gz, 3) + "," +
+                String(mx, 3) + "," + String(my, 3) + "," + String(mz, 3) + "," +
+                String(relAlt, 3);
+  
+  logData(rawDataFile, rawBuffer, rawCount, line);
 }
 
-// High-level function: call this from your main loop to log all sensor data.
+// Logs filtered sensor data from the EKF and VQF.
+// The EKF provides the fused state (position and velocity) and
+// VQF provides the filtered orientation (roll, pitch, yaw).
+// The data are formatted as a CSV line.
+void logFilteredSensorData() {
+  float x, y, z, vx, vy, vz;
+  // Get the current state from the EKF.
+  ekfGetState(x, y, z, vx, vy, vz);
+  
+  float roll, pitch, yaw;
+  // Get the orientation in Euler angles from VQF.
+  vqfGetEuler(roll, pitch, yaw);
+  
+  // Timestamp in microseconds.
+  unsigned long timestamp = micros();
+  
+  // CSV format: timestamp, x, y, z, vx, vy, vz, roll, pitch, yaw
+  String line = String(timestamp) + "," +
+                String(x, 3) + "," + String(y, 3) + "," + String(z, 3) + "," +
+                String(vx, 3) + "," + String(vy, 3) + "," + String(vz, 3) + "," +
+                String(roll, 3) + "," + String(pitch, 3) + "," + String(yaw, 3);
+  
+  logData(filteredDataFile, filteredBuffer, filteredCount, line);
+}
+
+// High-level function: logs both raw and filtered sensor data.
+// This function is called in the main loop.
 void logSensorData() {
-  logIMURawData();
-  logIMUFilteredData();
-  logIMURawOrientationData();
-  logBarometerData();
-  logEKFData();
+  logRawSensorData();
+  logFilteredSensorData();
 }
 
-// Optionally flush all buffers (e.g. on shutdown or periodically)
+// Flushes both raw and filtered data buffers (e.g., on shutdown or periodically).
 void flushAllBuffers() {
-  flushBuffer(imuRawFile, imuRawBuffer, imuRawCount);
-  flushBuffer(imuFilteredFile, imuFilteredBuffer, imuFilteredCount);
-  flushBuffer(imuOrientationFile, imuOrientationBuffer, imuOrientationCount);
-  flushBuffer(barometerFile, barometerBuffer, barometerCount);
-  flushBuffer(ekfFile, ekfBuffer, ekfCount);
+  flushBuffer(rawDataFile, rawBuffer, rawCount);
+  flushBuffer(filteredDataFile, filteredBuffer, filteredCount);
 }

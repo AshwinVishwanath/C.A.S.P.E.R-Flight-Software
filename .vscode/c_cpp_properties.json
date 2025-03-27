@@ -10,6 +10,8 @@
             "includePath": [
                 "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/include",
                 "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/src",
+                "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/SD/src",
+                "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/SdFat/src",
                 "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/ArduinoEigen",
                 "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/ArxTypeTraits",
                 "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/Adafruit BMP3XX Library",
@@ -88,10 +90,8 @@
                 "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/RA8875/src",
                 "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/RadioHead",
                 "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/ResponsiveAnalogRead/src",
-                "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/SD/src",
                 "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/SPIFlash",
                 "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/ST7735_t3/src",
-                "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/SdFat/src",
                 "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/SerialFlash",
                 "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/Servo",
                 "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/ShiftPWM",
@@ -126,6 +126,8 @@
                 "path": [
                     "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/include",
                     "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/src",
+                    "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/SD/src",
+                    "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/SdFat/src",
                     "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/ArduinoEigen",
                     "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/ArxTypeTraits",
                     "c:/Users/Ashwin/Documents/PlatformIO/Projects/C.A.S.P.E.R Flight Software/.pio/libdeps/teensy41/Adafruit BMP3XX Library",
@@ -204,10 +206,8 @@
                     "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/RA8875/src",
                     "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/RadioHead",
                     "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/ResponsiveAnalogRead/src",
-                    "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/SD/src",
                     "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/SPIFlash",
                     "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/ST7735_t3/src",
-                    "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/SdFat/src",
                     "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/SerialFlash",
                     "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/Servo",
                     "C:/Users/Ashwin/.platformio/packages/framework-arduinoteensy/libraries/ShiftPWM",
@@ -239,7 +239,7 @@
                 ]
             },
             "defines": [
-                "PLATFORMIO=60116",
+                "PLATFORMIO=60118",
                 "__IMXRT1062__",
                 "ARDUINO_TEENSY41",
                 "USB_SERIAL",
