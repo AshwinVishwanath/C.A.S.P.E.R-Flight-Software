@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "sensor_setup.h"
 #include "ekf_sensor_fusion.h"
-#include "orientation_VQF.h" // Include VQF header for orientation tracking
+#include "orientation_estimation.h" // Include VQF header for orientation tracking
 #include "datalogging.h"     // Added to integrate datalogging functions
 
 void setup() {
@@ -20,11 +20,7 @@ void setup() {
     Serial.print("Baseline Altitude: ");
     Serial.println(baselineAltitude, 3);
 
-    // Initialize VQF for orientation tracking
-    vqfInit();
-    vqfCalibrateOrientation(); // Perform 10-second calibration for roll, pitch, yaw offsets
-    Serial.println("VQF initialized and calibrated for roll, pitch, and yaw tracking.");
-
+    
     // Initialize SD card files for datalogging (raw and filtered sensor data)
     setupFiles();
 
@@ -54,18 +50,17 @@ void loop() {
         // **Update EKF for Position, Velocity, and Altitude**
         ekfPredict(ax, ay, az, dt);
         ekfUpdate(ax, ay, az, relativeAltitude);
-
-        // **Update VQF for Orientation (Roll, Pitch, Yaw)**
-        vqfPredict(gx, gy, gz, dt);
-        vqfUpdate(ax, ay, az);
-
         // Get the current state from the EKF
         float x, y, z, vx, vy, vz;
         ekfGetState(x, y, z, vx, vy, vz);
 
-        // Get orientation from the VQF
-        float roll, pitch, yaw;
-        vqfGetEuler(roll, pitch, yaw);
+        // get orientation angles 
+        updateIntegratedAngles(gx, gy, gz, dt);
+        float Roll, Pitch, Yaw;
+        getIntegratedAngles(Roll, Pitch, Yaw);
+        
+
+        
 
         // **Print the current state for analysis**
         Serial.print(">");
@@ -75,9 +70,9 @@ void loop() {
         Serial.print(",vz:"); Serial.print(vz, 3);
         Serial.print(",x:"); Serial.print(x, 3);
         Serial.print(",y:"); Serial.print(y, 3);
-        Serial.print(",roll:"); Serial.print(roll, 3); // Roll in degrees
-        Serial.print(",pitch:"); Serial.print(pitch, 3); // Pitch in degrees
-        Serial.print(",yaw:"); Serial.print(yaw, 3); // Yaw in degrees
+        Serial.print(",roll:"); Serial.print(Roll, 3); // Roll in degrees
+        Serial.print(",pitch:"); Serial.print(Pitch, 3); // Pitch in degrees
+        Serial.print(",yaw:"); Serial.print(Yaw, 3); // Yaw in degrees
         Serial.println();
 
         // Log sensor data (both raw and filtered) without affecting the printed output
