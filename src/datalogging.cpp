@@ -1,141 +1,186 @@
-#include "ekf_sensor_fusion.h"       // For EKF functions like ekfGetState()
-#include "orientation_estimation.h"  // For orientation estimation functions
-#include "sensor_setup.h"            // For getSensorData() and getRelativeAltitude()
+// datalogging.cpp
+
+#include "ekf_sensor_fusion.h"   // For EKF functions like ekfGetState()
+#include "orientation_VQF.h"     // For vqfGetEuler() or other orientation-related functions
+#include "sensor_setup.h"        // For getSensorData() and getRelativeAltitude()
 #include <SD.h>
 #include <SPI.h>
 #include <Arduino.h>
 
-// Define BUILTIN_SDCARD if not already defined (Teensy 4.1 built-in SD card usually on pin 10)
-#ifndef BUILTIN_SDCARD
-  #define BUILTIN_SDCARD 10
-#endif
+// ----------------------------------------------------------
+// 1) Global File objects (three files: raw data, filtered data, system log)
+// ----------------------------------------------------------
+File rawDataFile;       // Will store raw IMU + barometer data
+File filteredDataFile;  // Will store EKF state + orientation data
+File systemLogFile;     // Will store system log messages
 
-// Use sdCardCS as the chip select pin for the built-in SD card
-const int sdCardCS = BUILTIN_SDCARD;
+// ----------------------------------------------------------
+// 2) Buffers and flush thresholds for each file
+// ----------------------------------------------------------
 
-// Number of log entries to buffer before flushing.
-const int BUFFER_THRESHOLD = 100;
+// We'll buffer lines to reduce SD writes. Adjust thresholds as needed.
+String rawDataBuffer       = "";
+String filteredDataBuffer  = "";
+String systemLogBuffer     = "";
 
-// Global SD File objects for raw and filtered sensor data.
-File rawDataFile;       // File for raw sensor/barometer data.
-File filteredDataFile;  // File for filtered EKF/orientation estimation data.
+int rawDataCount           = 0;
+int filteredDataCount      = 0;
+int systemLogCount         = 0;
 
-// Global string buffers and counters for each log file.
-String rawBuffer = "";
-String filteredBuffer = "";
-int rawCount = 0;
-int filteredCount = 0;
+const int RAW_BUFFER_THRESHOLD      = 100;
+const int FILTERED_BUFFER_THRESHOLD = 100;
+const int SYSTEM_LOG_BUFFER_THRESHOLD = 100;
 
-// Flushes the provided buffer to its SD file and resets the counter.
-void flushBuffer(File &file, String &buffer, int &count) {
+// ----------------------------------------------------------
+// 3) Helper: flush any file's buffer
+// ----------------------------------------------------------
+void flushBuffer(File &file, String &buffer, int &count)
+{
   if (file) {
     file.print(buffer);
-    file.flush();  // Ensure data is written to disk.
+    file.flush();
   }
   buffer = "";
-  count = 0;
+  count  = 0;
 }
 
-// Appends a log entry to the buffer and flushes if the threshold is reached.
-void logData(File &file, String &buffer, int &count, const String &data) {
+// ----------------------------------------------------------
+// 4) System log - a separate mechanism for log() calls
+// ----------------------------------------------------------
+void flushSystemLog()
+{
+  flushBuffer(systemLogFile, systemLogBuffer, systemLogCount);
+}
+
+// This replaces Serial.println(...). Timestamps use micros().
+void log(const String &msg)
+{
+  unsigned long timestamp = micros();
+  String line = String(timestamp) + ": " + msg;
+  systemLogBuffer += line + "\n";
+  systemLogCount++;
+
+  // Auto-flush if threshold reached
+  if (systemLogCount >= SYSTEM_LOG_BUFFER_THRESHOLD) {
+    flushSystemLog();
+  }
+}
+
+// ----------------------------------------------------------
+// 5) Logging helpers for raw / filtered data
+// ----------------------------------------------------------
+// Append data to a given buffer, flush if threshold is reached
+void logData(File &file, String &buffer, int &count, 
+             const String &data, int threshold)
+{
   buffer += data + "\n";
   count++;
-  if (count >= BUFFER_THRESHOLD) {
+  if (count >= threshold) {
     flushBuffer(file, buffer, count);
   }
 }
 
-// Create a file with a base name and unique file number (e.g., "Raw_Sensor_Data_1.csv", "Raw_Sensor_Data_2.csv", etc.)
-void createFile(File &file, const char *baseName) {
-  int fileNumber = 1;
-  char fileName[32];
-  while (true) {
-    snprintf(fileName, sizeof(fileName), "%s_%d.csv", baseName, fileNumber);
-    if (!SD.exists(fileName)) {
-      file = SD.open(fileName, FILE_WRITE);
-      if (!file) {
-        Serial.println("Failed to open file");
-        while (1);  // Halt if file cannot be created.
-      }
-      Serial.print("Created file: ");
-      Serial.println(fileName);
-      break;
-    }
-    fileNumber++;
-  }
-}
-
-// Setup the SD card files for logging using the built-in SD card on Teensy 4.1.
-// This function creates unique files and writes header lines.
-void setupFiles() {
-  if (!SD.begin(sdCardCS)) {
-    Serial.println("SD initialization failed!");
+// ----------------------------------------------------------
+// 6) setupFiles() - open/create the 3 files on SD card
+// ----------------------------------------------------------
+void setupFiles()
+{
+  // Example: If using Teensy 4.1's built-in SD, you might do SD.begin(BUILTIN_SDCARD);
+  if (!SD.begin(10)) {
+    log("SD initialization failed!");
     return;
   }
-  
-  // Create unique log files using a base name.
-  createFile(rawDataFile, "Raw_Sensor_Data");
-  createFile(filteredDataFile, "Filtered_Sensor_Data");
-  
-  // Write header lines to each file.
-  rawDataFile.println("Time,ax,ay,az,gx,gy,gz,mx,my,mz,relativeAltitude");
-  rawDataFile.flush();
-  
-  filteredDataFile.println("Time,x,y,z,vx,vy,vz,roll,pitch,yaw");
-  filteredDataFile.flush();
+
+  // Raw data
+  rawDataFile = SD.open("RawDataFile.txt", FILE_WRITE);
+  // Filtered data
+  filteredDataFile = SD.open("FilteredDataFile.txt", FILE_WRITE);
+  // System log
+  systemLogFile = SD.open("SystemLogFile.txt", FILE_WRITE);
+
+  if (!rawDataFile || !filteredDataFile || !systemLogFile) {
+    log("Failed to open one or more log files!");
+  } else {
+    log("Successfully opened raw, filtered, and system log files.");
+  }
+
+  // Optionally write column headers
+  if (rawDataFile) {
+    rawDataFile.println("timestamp,ax,ay,az,gx,gy,gz,mx,my,mz,baroAlt");
+    rawDataFile.flush();
+  }
+  if (filteredDataFile) {
+    filteredDataFile.println("timestamp,x,y,z,vx,vy,vz,roll,pitch,yaw");
+    filteredDataFile.flush();
+  }
 }
 
-// Logs raw sensor data from the IMU and barometer.
-void logRawSensorData() {
+// ----------------------------------------------------------
+// 7) Logging raw data (IMU + barometer)
+// ----------------------------------------------------------
+void logRawData()
+{
+  // Gather raw IMU data
   float ax, ay, az, gx, gy, gz, mx, my, mz;
-  // Get raw sensor data.
   getSensorData(ax, ay, az, gx, gy, gz, mx, my, mz);
-  // Get relative altitude.
-  float relAlt = getRelativeAltitude();
-  // Get timestamp.
-  unsigned long timestamp = micros();
   
-  // Format CSV: timestamp, ax, ay, az, gx, gy, gz, mx, my, mz, relative altitude
+  // Get barometer altitude
+  float baroAlt = getRelativeAltitude();
+
+  // Build CSV line
+  unsigned long timestamp = micros();
   String line = String(timestamp) + "," +
                 String(ax, 3) + "," + String(ay, 3) + "," + String(az, 3) + "," +
                 String(gx, 3) + "," + String(gy, 3) + "," + String(gz, 3) + "," +
                 String(mx, 3) + "," + String(my, 3) + "," + String(mz, 3) + "," +
-                String(relAlt, 3);
-  
-  logData(rawDataFile, rawBuffer, rawCount, line);
+                String(baroAlt, 3);
+
+  // Write to raw data file (with buffering)
+  logData(rawDataFile, rawDataBuffer, rawDataCount, line, RAW_BUFFER_THRESHOLD);
 }
 
-// Logs filtered sensor data from the EKF and integrated orientation estimation.
-void logFilteredSensorData() {
+// ----------------------------------------------------------
+// 8) Logging filtered data (EKF + orientation)
+// ----------------------------------------------------------
+void logFilteredData()
+{
+  // Get EKF state
   float x, y, z, vx, vy, vz;
-  // Get the EKF state.
   ekfGetState(x, y, z, vx, vy, vz);
-  
+
+  // Get orientation angles (roll, pitch, yaw)
   float roll, pitch, yaw;
-  // Get the integrated orientation (in degrees).
-  getIntegratedAngles(roll, pitch, yaw);
-  
-  // Get timestamp.
+  vqfGetEuler(roll, pitch, yaw);
+
+  // Build CSV line
   unsigned long timestamp = micros();
-  
-  // Format CSV: timestamp, x, y, z, vx, vy, vz, roll, pitch, yaw
   String line = String(timestamp) + "," +
                 String(x, 3) + "," + String(y, 3) + "," + String(z, 3) + "," +
                 String(vx, 3) + "," + String(vy, 3) + "," + String(vz, 3) + "," +
                 String(roll, 3) + "," + String(pitch, 3) + "," + String(yaw, 3);
-                
-  logData(filteredDataFile, filteredBuffer, filteredCount, line);
+
+  // Write to filtered data file (with buffering)
+  logData(filteredDataFile, filteredDataBuffer, filteredDataCount, 
+          line, FILTERED_BUFFER_THRESHOLD);
 }
 
-// High-level function: logs both raw and filtered sensor data.
-// This function is intended to be called in your main loop.
-void logSensorData() {
-  logRawSensorData();
-  logFilteredSensorData();
+// ----------------------------------------------------------
+// 9) Combined function to log everything once per loop
+// ----------------------------------------------------------
+void logSensorData()
+{
+  // Raw data
+  logRawData();
+  // Filtered data
+  logFilteredData();
 }
 
-// Flushes both raw and filtered data buffers (e.g., on shutdown or periodically).
-void flushAllBuffers() {
-  flushBuffer(rawDataFile, rawBuffer, rawCount);
-  flushBuffer(filteredDataFile, filteredBuffer, filteredCount);
+// ----------------------------------------------------------
+// 10) Flush everything
+// ----------------------------------------------------------
+void flushAllBuffers()
+{
+  flushBuffer(rawDataFile,       rawDataBuffer,       rawDataCount);
+  flushBuffer(filteredDataFile,  filteredDataBuffer,  filteredDataCount);
+  flushSystemLog();  // flush the system log buffer
 }
