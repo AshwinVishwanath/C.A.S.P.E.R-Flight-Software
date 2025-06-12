@@ -12,4 +12,7 @@ void logSensorData();
 // Flushes any remaining buffered data to the SD files.
 void flushAllBuffers();
 
+// Log a message to the system log with timestamp
+void Summarylog(const String &msg);
+
 #endif // DATALOGGING_H
