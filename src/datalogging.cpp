@@ -93,7 +93,7 @@ void logRawSensorData() {
   // Get relative altitude.
   float relAlt = getRelativeAltitude();
   // Get timestamp.
-  unsigned long timestamp = micros();
+  unsigned long timestamp = micros()/1000000;  // Convert to seconds.
   
   // Format CSV: timestamp, ax, ay, az, gx, gy, gz, mx, my, mz, relative altitude
   String line = String(timestamp) + "," +
@@ -116,7 +116,7 @@ void logFilteredSensorData() {
   getIntegratedAngles(roll, pitch, yaw);
   
   // Get timestamp.
-  unsigned long timestamp = micros();
+  unsigned long timestamp = micros()/1000000;  // Convert to seconds.
   
   // Format CSV: timestamp, x, y, z, vx, vy, vz, roll, pitch, yaw
   String line = String(timestamp) + "," +
