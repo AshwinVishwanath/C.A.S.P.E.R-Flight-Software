@@ -3,117 +3,125 @@
 #include <ArduinoEigen.h>
 #include <math.h>
 
-// Constants for sensor fusion
-static const int n_x = 6; // x, y, z, vx, vy, vz
-static const int n_z = 7; // accelerometer (ax, ay, az) and barometer (alt)
+static const int n_x = 6;
+static const int n_z = 1;
 
-static Eigen::VectorXf x_mean; 
+static Eigen::VectorXf x_mean;
 static Eigen::MatrixXf P;
+static Eigen::MatrixXf Q;
+static Eigen::MatrixXf R;
 
-static Eigen::MatrixXf Q; // Process noise
-static Eigen::MatrixXf R; // Measurement noise
+Eigen::MatrixXf lastKalmanGain = Eigen::MatrixXf::Zero(n_x, 1);
 
 static bool initialized = false;
 
-// Initialize the EKF with starting position, velocity
 void ekfInit(float x, float y, float z, float vx, float vy, float vz) {
     x_mean = Eigen::VectorXf(n_x);
-    x_mean << x, y, z, vx, vy, vz;
+    P      = Eigen::MatrixXf(n_x, n_x);
+    Q      = Eigen::MatrixXf(n_x, n_x);
+    R      = Eigen::MatrixXf(n_z, n_z);
 
+    x_mean << x, y, z, vx, vy, vz;
     P = Eigen::MatrixXf::Identity(n_x, n_x) * 0.1f;
 
-    // Process noise matrix Q
-    Q = (Eigen::MatrixXf(n_x, n_x) << 
-        0.01f, 0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // Row 1: x position
-        0.0f,  0.01f, 0.0f,  0.0f,  0.0f,  0.0f,  // Row 2: y position
-        0.0f,  0.0f,  0.01f, 0.0f,  0.0f,  0.0f,  // Row 3: z position
-        0.0f,  0.0f,  0.0f,  0.1f,  0.0f,  0.0f,  // Row 4: x velocity
-        0.0f,  0.0f,  0.0f,  0.0f,  0.1f,  0.0f,  // Row 5: y velocity
-        0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.1f   // Row 6: z velocity
-    ).finished();
+    Q.setZero();
+    Q(0,0) = 0.02f;
+    Q(1,1) = 0.04f;
+    Q(2,2) = 0.03f;
+    Q(3,3) = 0.4f;
+    Q(4,4) = 0.36f;
+    Q(5,5) = 0.32f;
 
-    // Measurement noise matrix R
-    R = (Eigen::MatrixXf(n_z, n_z) << 
-        0.1f, 0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // Row 1: x acceleration
-        0.0f, 0.1f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // Row 2: y acceleration
-        0.0f, 0.0f,  0.1f,  0.0f,  0.0f,  0.0f,  0.0f,  // Row 3: z acceleration
-        0.0f, 0.0f,  0.0f,  0.1f,  0.0f,  0.0f,  0.0f,  // Row 4: unused (placeholder)
-        0.0f, 0.0f,  0.0f,  0.0f,  0.1f,  0.0f,  0.0f,  // Row 5: unused (placeholder)
-        0.0f, 0.0f,  0.0f,  0.0f,  0.0f,  0.1f,  0.0f,  // Row 6: unused (placeholder)
-        0.0f, 0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.1f   // Row 7: altitude
-    ).finished();
+    R(0,0) = 0.3f;
 
     initialized = true;
 }
 
-
 void ekfPredict(float ax, float ay, float az, float dt) {
     if (!initialized) return;
 
-    float x = x_mean(0);
-    float y = x_mean(1);
-    float z = x_mean(2);
+    float x  = x_mean(0);
+    float y  = x_mean(1);
+    float z  = x_mean(2);
     float vx = x_mean(3);
     float vy = x_mean(4);
     float vz = x_mean(5);
 
-    // Update position
-    x += vx * dt;
-    y += vy * dt;
-    z += vz * dt;
+    auto f = [&](float vx_, float vy_, float vz_, float ax_, float ay_, float az_) {
+        Eigen::VectorXf dx(n_x);
+        dx << vx_, vy_, vz_, ax_, ay_, az_;
+        return dx;
+    };
 
-    // Update velocity using accelerometer input
-    vx += ax * dt;
-    vy += ay * dt;
-    vz += az * dt;
+    Eigen::VectorXf k1 = f(vx, vy, vz, ax, ay, az);
+    Eigen::VectorXf k2 = f(
+        vx + 0.5f * k1(3) * dt,
+        vy + 0.5f * k1(4) * dt,
+        vz + 0.5f * k1(5) * dt,
+        ax, ay, az
+    );
+    Eigen::VectorXf k3 = f(
+        vx + 0.5f * k2(3) * dt,
+        vy + 0.5f * k2(4) * dt,
+        vz + 0.5f * k2(5) * dt,
+        ax, ay, az
+    );
+    Eigen::VectorXf k4 = f(
+        vx + k3(3) * dt,
+        vy + k3(4) * dt,
+        vz + k3(5) * dt,
+        ax, ay, az
+    );
 
-    // Update state vector
+    Eigen::VectorXf dx_total = (dt / 6.0f) * (k1 + 2.0f * k2 + 2.0f * k3 + k4);
+
+    x  += dx_total(0);
+    y  += dx_total(1);
+    z  += dx_total(2);
+    vx += dx_total(3);
+    vy += dx_total(4);
+    vz += dx_total(5);
+
     Eigen::VectorXf x_pred(n_x);
     x_pred << x, y, z, vx, vy, vz;
 
-    // State transition matrix
     Eigen::MatrixXf F_mat = Eigen::MatrixXf::Identity(n_x, n_x);
-    F_mat(0, 3) = dt;
-    F_mat(1, 4) = dt;
-    F_mat(2, 5) = dt;
+    F_mat(0,3) = dt;
+    F_mat(1,4) = dt;
+    F_mat(2,5) = dt;
 
-    // Update covariance matrix
     P = F_mat * P * F_mat.transpose() + Q;
 
-    // Update the state vector
     x_mean = x_pred;
 }
 
-void ekfUpdate(float ax_meas, float ay_meas, float az_meas, float alt_meas) {
+void ekfUpdateBaro(float alt_meas) {
     if (!initialized) return;
 
-    // Measurement vector (acceleration and altitude)
     Eigen::VectorXf z(n_z);
-    z << ax_meas, ay_meas, az_meas, 0.0f, 0.0f, 0.0f, alt_meas;
+    z(0) = alt_meas;
 
-    // Measurement model
     Eigen::VectorXf h(n_z);
-    h << x_mean(3), x_mean(4), x_mean(5), 0.0f, 0.0f, 0.0f, x_mean(2);
+    h(0) = x_mean(1);
 
-    // Innovation
-    Eigen::VectorXf y = z - h;
+    Eigen::VectorXf y_resid = z - h;
 
-    // Measurement matrix H
     Eigen::MatrixXf H = Eigen::MatrixXf::Zero(n_z, n_x);
-    H(0, 3) = 1; 
-    H(1, 4) = 1; 
-    H(2, 5) = 1; 
-    H(6, 2) = 1; 
+    H(0, 1) = 1.0f;
 
-    // Innovation covariance
     Eigen::MatrixXf S = H * P * H.transpose() + R;
     Eigen::MatrixXf K = P * H.transpose() * S.inverse();
 
-    // Update state
-    x_mean = x_mean + K * y;
+    x_mean += K * y_resid;
 
-    // Update covariance
-    P = (Eigen::MatrixXf::Identity(n_x, n_x) - K * H) * P;
+    Eigen::MatrixXf I = Eigen::MatrixXf::Identity(n_x, n_x);
+    P = (I - K * H) * P;
+
+    lastKalmanGain = K;
+}
+
+void ekfUpdate(float ax_meas, float ay_meas, float az_meas, float alt_meas) {
+    ekfUpdateBaro(alt_meas);
 }
 
 void ekfGetState(float &x, float &y, float &z, float &vx, float &vy, float &vz) {
@@ -124,3 +132,4 @@ void ekfGetState(float &x, float &y, float &z, float &vx, float &vy, float &vz) 
     vy = x_mean(4);
     vz = x_mean(5);
 }
+
