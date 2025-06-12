@@ -1,6 +1,7 @@
 #include "sensor_setup.h"
 #include "BNO_LUT.h"
 #include "datalogging.h"
+#include "camera_trigger.h"
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 #include <Adafruit_BMP3XX.h>
@@ -59,6 +60,7 @@ float manualCalibrateBMP388() {
   const int numSamples = 1000;
   float totalAltitude = 0.0f;
   for (int i = 0; i < numSamples; i++) {
+    handleCameraTrigger();
     if (bmp.performReading()) {
       float currentAltitude = bmp.readAltitude(1013.25);
       totalAltitude += currentAltitude;

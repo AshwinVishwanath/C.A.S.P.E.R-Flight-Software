@@ -6,6 +6,7 @@
 #include "ekf_sensor_fusion.h"
 #include "orientation_estimation.h"
 #include "datalogging.h"
+#include "camera_trigger.h"
 
 enum SystemState {
   INIT,
@@ -52,10 +53,12 @@ const int LED_PIN = 36;
 void setup() {
   Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);
+  initCameraTrigger();
   stateStartTime = millis();
 }
 
 void loop() {
+  handleCameraTrigger();
   switch(systemState) {
 
     case INIT: {
