@@ -11,18 +11,30 @@ The project aims to achieve precise real-time tracking for aerospace application
 - **Real-Time Processing:** Runs at a 1 kHz update rate on the Teensy 4.1, allowing for high-speed flight dynamics tracking.
 - **Data Filtering:** Employs sensor offset calibration and low-pass filtering to improve measurement accuracy.
 - **Calibration:** Automatically calibrates IMU and barometric sensors before operation.
+- **Data Logging:** Writes raw and filtered sensor data to the SD card for later analysis.
+- **Camera Trigger:** Automatically activates a connected camera shortly after power up.
+- **Orientation Estimation:** Integrates gyroscope rates to provide roll, pitch and yaw angles.
 
 ---
 
 ## Repository Structure
 ```
-├── main.cpp          # Main execution loop for real-time sensor fusion and EKF
-├── sensor_setup.cpp  # Sensor initialization, calibration, and correction
-├── sensor_setup.h    # Header file for sensor functions and global variables
-├── filter.cpp        # Implementation of the EKF predict and update steps
-├── filter.h          # Header file for the EKF filter functions and declarations
-├── eq_of_motion.cpp  # Placeholder for future equations of motion logic (empty for now)
-├── eq_of_motion.h    # Header file for the equations of motion (currently unused)
+├── platformio.ini           # PlatformIO build configuration
+├── include/                 # Header files
+│   ├── BNO_LUT.h            # Calibration offsets for BNO055
+│   ├── camera_trigger.h     # Camera trigger interface
+│   ├── datalogging.h        # SD card logging helpers
+│   ├── ekf_sensor_fusion.h  # EKF state and update functions
+│   ├── orientation_estimation.h # Gyro integration helpers
+│   └── sensor_setup.h       # Sensor initialization and utilities
+├── src/                     # Source files
+│   ├── camera_trigger.cpp
+│   ├── datalogging.cpp
+│   ├── ekf_sensor_fusion.cpp
+│   ├── orientation_estimation.cpp
+│   ├── sensor_setup.cpp
+│   └── main.cpp             # Main flight and state machine logic
+└── C.A.S.P.E.R/             # Reserved directory for flight data
 ```
 
 ---
@@ -85,6 +97,7 @@ The EKF tracks the 6 states of the system:
 2. **Load Code:**
    - Bring all project files together into one Arduino sketch.
    - Upload this combined sketch to the Teensy 4.1.
+---
 
 ### Operation
 1. Upon startup, the system will calibrate sensors.
