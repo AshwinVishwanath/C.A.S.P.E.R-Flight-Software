@@ -83,8 +83,8 @@ The EKF tracks the 6 states of the system:
    - BNO055 connected to I2C (SDA, SCL) pins.
    - BMP388 connected to I2C (SDA1, SCL1) pins.
 2. **Load Code:**
-   - Open `main.cpp` in Arduino IDE.
-   - Upload the sketch to the Teensy 4.1.
+   - Bring all project files together into one Arduino sketch.
+   - Upload this combined sketch to the Teensy 4.1.
 
 ### Operation
 1. Upon startup, the system will calibrate sensors.
@@ -112,17 +112,11 @@ The EKF tracks the 6 states of the system:
 - **Data Visualization:** Add support for real-time visualization of the position and orientation.
 
 ---
-
-## License
-This project is open-source and licensed under the MIT License.
-
----
-
 ## Contributions
 Contributions are welcome! To contribute, please fork the repo, make your changes, and submit a pull request. Feel free to open issues for bug reports or feature requests.
 
 ---
 
 ## Contact
-For any inquiries, reach out to the project maintainer or open an issue in the repository.
+For any inquiries, contact avishwanath1@sheffield.ac.uk or open an issue in the repository.
 
